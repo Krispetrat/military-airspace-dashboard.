@@ -6,14 +6,18 @@
  * be safely embedded in client-side code - anyone could read it out of
  * the built JS bundle.
  *
- * Instead this uses Twitch's public GQL endpoint with the client ID that
- * Twitch's own website/player uses for logged-out visitors. It's
- * undocumented but widely relied on (many open-source "is streamer live"
- * widgets use exactly this), requires no secret, and works from the
- * browser with no backend. Because it's undocumented, Twitch could
- * change or break it without notice - if this stops working, the
- * reliable long-term fix is standing up a tiny backend that calls the
- * real Helix API with your own client ID/secret.
+ * Instead this sends a plain GraphQL query to Twitch's public GQL
+ * endpoint using the client ID that Twitch's own website/player uses for
+ * logged-out visitors. It's undocumented but widely relied on. An earlier
+ * version of this used one of Twitch's internal "persisted query" hashes
+ * instead of an inline query string - Twitch rotated/invalidated that
+ * hash without notice, which silently broke live detection. Sending the
+ * query text directly (as done here) avoids depending on their specific
+ * persisted-query registry, so it's less likely to break the same way -
+ * but since the endpoint itself is still undocumented, Twitch could
+ * change or block it entirely at some point. If that happens, the
+ * reliable long-term fix is a small backend that calls the real Helix
+ * API with your own client ID/secret.
  */
 
 const TWITCH_PUBLIC_CLIENT_ID = 'kimne78kx3ncx6brgo4mv6wki5h1ko';
@@ -26,25 +30,22 @@ export async function isTwitchChannelLive(channel: string): Promise<boolean> {
         'Client-Id': TWITCH_PUBLIC_CLIENT_ID,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify([
-        {
-          operationName: 'StreamMetadata',
-          variables: { channelLogin: channel },
-          extensions: {
-            persistedQuery: {
-              version: 1,
-              sha256Hash:
-                '1c719a40e481453e5c48d9bb585d971b8b372f8ffabca2861ebd7c4a5c00b0a3',
-            },
-          },
-        },
-      ]),
+      body: JSON.stringify({
+        query: `query ($login: String!) { user(login: $login) { stream { id } } }`,
+        variables: { login: channel },
+      }),
     });
 
     if (!response.ok) return false;
 
     const json = await response.json();
-    const stream = json?.[0]?.data?.user?.stream;
+
+    if (json?.errors) {
+      console.error('Twitch GQL returned an error:', json.errors);
+      return false;
+    }
+
+    const stream = json?.data?.user?.stream;
     return Boolean(stream);
   } catch (error) {
     console.error('Twitch live-status check failed:', error);
