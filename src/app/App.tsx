@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { StatusBar } from './components/StatusBar';
 import { SchedulePanel } from './components/SchedulePanel';
 import { AirspaceMap, AIRSPACES, Airspace } from './components/AirspaceMap';
@@ -12,6 +12,17 @@ export default function App() {
   const [selectedAirspace, setSelectedAirspace] = useState<Airspace | null>(null);
   const [faaData, setFaaData] = useState<any>(null);
   const [showPopout, setShowPopout] = useState(false);
+  const wasLiveRef = useRef(false);
+
+  // Auto-open the miniplayer the moment the stream goes live (transition
+  // from offline -> live), not on every status check while it's already
+  // live - that would re-open it right after the user closes it.
+  const handleTwitchLiveChange = (isLive: boolean) => {
+    if (isLive && !wasLiveRef.current) {
+      setShowPopout(true);
+    }
+    wasLiveRef.current = isLive;
+  };
 
   // Fetch FAA data on mount and refresh every 5 minutes
   useEffect(() => {
@@ -58,7 +69,7 @@ export default function App() {
   return (
     <div className="size-full flex flex-col bg-[#0f1419]">
       {/* Twitch Stream Banner */}
-      <TwitchBanner onOpenPopout={() => setShowPopout(true)} />
+      <TwitchBanner onOpenPopout={() => setShowPopout(true)} onLiveChange={handleTwitchLiveChange} />
       
       {/* Top Status Bar */}
       <StatusBar />

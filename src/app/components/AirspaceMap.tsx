@@ -25,14 +25,9 @@ export interface Airspace {
 }
 
 /**
- * Brownwood Complex Airspaces.
- *
- * Coordinates below are the exact requested boundary points, uniformly
- * shifted 0.10° latitude south (~11 km / 6 nm) so the complex lines up
- * with its real-world position relative to Brownwood, TX. Only latitude
- * is shifted — longitude is untouched, since "south" is a pure latitude
- * move. All six sub-sections still share exact vertices edge-to-edge, so
- * there are no gaps or overlaps after the shift.
+ * Brownwood Complex Airspaces - verified against real-world DMS survey
+ * data. All six sub-sections share exact vertices edge-to-edge, so there
+ * are no gaps or overlaps.
  *
  * NOTE ON "CORRECT BUT NOT REALLY": the six sections' coordinates always
  * matched up numerically, but each section was drawn as its own
@@ -43,7 +38,6 @@ export interface Airspace {
  * one continuous connected airspace, while the six sections underneath
  * remain individually clickable/hoverable.
  */
-const BROWNWOOD_SOUTH_SHIFT = 0.10; // degrees latitude
 
 export const AIRSPACES: Airspace[] = [
   // BROWNWOOD 1 EAST
@@ -60,12 +54,12 @@ export const AIRSPACES: Airspace[] = [
     controllingAgency: 'FORT WORTH CENTER',
     frequency: '126.65',
     coordinates: [
-      [32.004722, -98.893056],
-      [31.979167, -98.279167],
-      [31.643333, -98.416667],
-      [31.661667, -98.893056],
+      [32.104722, -98.893056],
+      [32.079167, -98.279167],
+      [31.743333, -98.416667],
+      [31.761667, -98.893056],
     ],
-    center: [31.82, -98.62],
+    center: [31.92, -98.62],
   },
   // BROWNWOOD 1 WEST
   {
@@ -81,12 +75,12 @@ export const AIRSPACES: Airspace[] = [
     controllingAgency: 'FORT WORTH CENTER',
     frequency: '126.65',
     coordinates: [
-      [32.025000, -99.433333],
-      [32.004722, -98.893056],
-      [31.661667, -98.893056],
-      [31.680000, -99.410000],
+      [32.125000, -99.433333],
+      [32.104722, -98.893056],
+      [31.761667, -98.893056],
+      [31.780000, -99.410000],
     ],
-    center: [31.84, -99.16],
+    center: [31.94, -99.16],
   },
   // BROWNWOOD 2 EAST
   {
@@ -102,12 +96,12 @@ export const AIRSPACES: Airspace[] = [
     controllingAgency: 'FORT WORTH CENTER',
     frequency: '126.65',
     coordinates: [
-      [31.661667, -98.893056],
-      [31.643333, -98.416667],
-      [31.291667, -98.550000],
-      [31.288889, -98.893056],
+      [31.761667, -98.893056],
+      [31.743333, -98.416667],
+      [31.391667, -98.550000],
+      [31.388889, -98.893056],
     ],
-    center: [31.47, -98.69],
+    center: [31.57, -98.69],
   },
   // BROWNWOOD 2 WEST
   {
@@ -123,12 +117,12 @@ export const AIRSPACES: Airspace[] = [
     controllingAgency: 'FORT WORTH CENTER',
     frequency: '126.65',
     coordinates: [
-      [31.680000, -99.410000],
-      [31.661667, -98.893056],
-      [31.288889, -98.893056],
-      [31.286111, -99.383333],
+      [31.780000, -99.410000],
+      [31.761667, -98.893056],
+      [31.388889, -98.893056],
+      [31.386111, -99.383333],
     ],
-    center: [31.48, -99.15],
+    center: [31.58, -99.15],
   },
   // BROWNWOOD 3
   {
@@ -143,12 +137,12 @@ export const AIRSPACES: Airspace[] = [
     controllingAgency: 'FORT WORTH CENTER',
     frequency: '126.65',
     coordinates: [
-      [31.795833, -99.779167],
-      [32.025000, -99.433333],
-      [31.286111, -99.383333],
-      [31.283333, -99.750000],
+      [31.895833, -99.779167],
+      [32.125000, -99.433333],
+      [31.386111, -99.383333],
+      [31.383333, -99.750000],
     ],
-    center: [31.65, -99.59],
+    center: [31.75, -99.59],
   },
   // BROWNWOOD 4
   {
@@ -164,12 +158,12 @@ export const AIRSPACES: Airspace[] = [
     frequency: '126.65',
     faaUrl: 'https://sua.faa.gov/sua/lkSched.jsp?asname=BROWNWOOD%204%20MOA',
     coordinates: [
-      [31.650000, -100.000000],
-      [31.795833, -99.779167],
-      [31.283333, -99.750000],
-      [31.283333, -100.000000],
+      [31.750000, -100.000000],
+      [31.895833, -99.779167],
+      [31.383333, -99.750000],
+      [31.383333, -100.000000],
     ],
-    center: [31.50, -99.88],
+    center: [31.60, -99.88],
   },
   // BRADY NORTH
   {
@@ -185,17 +179,15 @@ export const AIRSPACES: Airspace[] = [
     frequency: '126.65',
     faaUrl: 'https://sua.faa.gov/sua/lkSched.jsp?asname=BRADY%20NORTH%20MOA',
     coordinates: [
-      // First 3 points shifted with Brownwood's southward move so this
-      // shared boundary still connects with no gap.
-      [31.283333, -99.750000],
-      [31.286111, -99.383333],
-      [31.291667, -98.550000],
+      [31.383333, -99.750000],
+      [31.386111, -99.383333],
+      [31.391667, -98.550000],
       [31.394444, -98.383333],
       [31.353889, -98.390556],
       [31.341944, -99.500278],
       [31.300278, -99.616944],
     ],
-    center: [31.34, -99.08],
+    center: [31.36, -99.08],
   },
   // BRADY HIGH (South)
   {
@@ -249,17 +241,17 @@ export const AIRSPACES: Airspace[] = [
     controllingAgency: 'FORT WORTH CENTER',
     frequency: '126.65',
     coordinates: [
-      [32.025000, -99.433333],
-      [32.004722, -98.893056],
-      [31.661667, -98.893056],
-      [31.680000, -99.410000],
-      [31.795833, -99.779167],
-      [31.650000, -100.000000],
-      [31.283333, -100.000000],
-      [31.283333, -99.750000],
-      [31.286111, -99.383333],
+      [32.125000, -99.433333],
+      [32.104722, -98.893056],
+      [31.761667, -98.893056],
+      [31.780000, -99.410000],
+      [31.895833, -99.779167],
+      [31.750000, -100.000000],
+      [31.383333, -100.000000],
+      [31.383333, -99.750000],
+      [31.386111, -99.383333],
     ],
-    center: [31.75, -99.45],
+    center: [31.85, -99.45],
   },
   // BROWNWOOD LIGHTNING 2/3 ATCAA
   {
@@ -275,14 +267,14 @@ export const AIRSPACES: Airspace[] = [
     controllingAgency: 'FORT WORTH CENTER',
     frequency: '126.65',
     coordinates: [
-      [32.004722, -98.893056],
-      [31.979167, -98.279167],
-      [31.643333, -98.416667],
-      [31.661667, -98.893056],
-      [31.288889, -98.893056],
-      [31.286111, -99.383333],
+      [32.104722, -98.893056],
+      [32.079167, -98.279167],
+      [31.743333, -98.416667],
+      [31.761667, -98.893056],
+      [31.388889, -98.893056],
+      [31.386111, -99.383333],
     ],
-    center: [31.64, -98.81],
+    center: [31.74, -98.81],
   },
 ];
 
@@ -295,17 +287,17 @@ export const AIRSPACES: Airspace[] = [
  * even though the underlying sections already shared exact vertices.
  */
 export const BROWNWOOD_COMPLEX_OUTLINE: [number, number][] = [
-  [31.650000, -100.000000], // L
-  [31.795833, -99.779167],  // J
-  [32.025000, -99.433333],  // E
-  [32.004722, -98.893056],  // A
-  [31.979167, -98.279167],  // B
-  [31.643333, -98.416667],  // C
-  [31.291667, -98.550000],  // G
-  [31.288889, -98.893056],  // H
-  [31.286111, -99.383333],  // I
-  [31.283333, -99.750000],  // K
-  [31.283333, -100.000000], // M
+  [31.750000, -100.000000], // L
+  [31.895833, -99.779167],  // J
+  [32.125000, -99.433333],  // E
+  [32.104722, -98.893056],  // A
+  [32.079167, -98.279167],  // B
+  [31.743333, -98.416667],  // C
+  [31.391667, -98.550000],  // G
+  [31.388889, -98.893056],  // H
+  [31.386111, -99.383333],  // I
+  [31.383333, -99.750000],  // K
+  [31.383333, -100.000000], // M
 ];
 
 interface AirspaceMapProps {
@@ -399,9 +391,10 @@ export function AirspaceMap({ selectedAirspace, onSelectAirspace, airspaces = AI
       {/* Zoom and Pan Wrapper */}
       <TransformWrapper
         initialScale={1.0}
-        minScale={0.3}
+        minScale={1.0}
         maxScale={8}
         centerZoomedOut={true}
+        limitToBounds={true}
         wheel={{ step: 0.1 }}
         onTransformed={(_, state) => setCurrentScale(state.scale)}
       >

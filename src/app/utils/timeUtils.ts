@@ -72,6 +72,30 @@ export function parseZuluTime(zuluTimeStr: string): Date {
 }
 
 /**
+ * Get the next real-world occurrence of a Zulu time-of-day, given it
+ * recurs daily. If that hour has already passed today, this rolls to
+ * tomorrow and flags it, instead of silently returning a time in the past.
+ *
+ * This is the root fix for "can't tell if something is today or
+ * tomorrow": previously parseZuluTime() always built today's date at that
+ * hour, even when that hour had already gone by - so a start time like
+ * "01:00Z" checked at 03:00Z today would look like it was 2 hours ago
+ * instead of ~22 hours from now (tomorrow).
+ */
+export function getNextOccurrence(zuluTimeStr: string): { date: Date; isTomorrow: boolean } {
+  const now = new Date();
+  let date = parseZuluTime(zuluTimeStr);
+  let isTomorrow = false;
+
+  if (date.getTime() <= now.getTime()) {
+    date = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+    isTomorrow = true;
+  }
+
+  return { date, isTomorrow };
+}
+
+/**
  * Calculate countdown to a target time
  */
 export function calculateCountdown(targetTime: Date): Countdown {
@@ -104,30 +128,38 @@ export function getAirspaceCountdown(
   status: 'active' | 'scheduled' | 'inactive',
   startTime?: string,
   endTime?: string
-): { text: string; countdown: Countdown | null } {
+): { text: string; countdown: Countdown | null; isTomorrow: boolean } {
   if (status === 'inactive') {
-    return { text: 'Inactive', countdown: null };
+    return { text: 'Inactive', countdown: null, isTomorrow: false };
   }
-  
+
   if (status === 'active' && endTime) {
-    const endDate = parseZuluTime(endTime);
+    // An active window's end can itself roll into tomorrow (e.g. an
+    // overnight window like 19:00Z-01:00Z that's currently active).
+    const { date: endDate, isTomorrow } = getNextOccurrence(endTime);
     const countdown = calculateCountdown(endDate);
     return {
-      text: `Ends in ${countdown.formatted}`,
+      text: `Ends in ${countdown.formatted}${isTomorrow ? ' (Tomorrow)' : ''}`,
       countdown,
+      isTomorrow,
     };
   }
-  
+
   if (status === 'scheduled' && startTime) {
-    const startDate = parseZuluTime(startTime);
+    const { date: startDate, isTomorrow } = getNextOccurrence(startTime);
     const countdown = calculateCountdown(startDate);
     return {
-      text: `Starts in ${countdown.formatted}`,
+      text: `Starts in ${countdown.formatted}${isTomorrow ? ' (Tomorrow)' : ''}`,
       countdown,
+      isTomorrow,
     };
   }
-  
-  return { text: status.charAt(0).toUpperCase() + status.slice(1), countdown: null };
+
+  return {
+    text: status.charAt(0).toUpperCase() + status.slice(1),
+    countdown: null,
+    isTomorrow: false,
+  };
 }
 
 /**

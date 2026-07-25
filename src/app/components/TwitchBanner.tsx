@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ExternalLink, Tv } from 'lucide-react';
+import { isTwitchChannelLive } from '../services/twitchStatus';
 
 const TWITCH_CHANNEL = 'thoraviation';
 const TWITCH_URL = `https://www.twitch.tv/${TWITCH_CHANNEL}`;
@@ -7,9 +8,10 @@ const TWITCH_URL = `https://www.twitch.tv/${TWITCH_CHANNEL}`;
 interface TwitchBannerProps {
   className?: string;
   onOpenPopout?: () => void;
+  onLiveChange?: (isLive: boolean) => void;
 }
 
-export function TwitchBanner({ className = '', onOpenPopout }: TwitchBannerProps) {
+export function TwitchBanner({ className = '', onOpenPopout, onLiveChange }: TwitchBannerProps) {
   const [isLive, setIsLive] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -25,22 +27,10 @@ export function TwitchBanner({ className = '', onOpenPopout }: TwitchBannerProps
 
   const checkTwitchStatus = async () => {
     try {
-      // In production, this would call the Twitch API
-      // For now, we'll use a mock implementation that randomly sets live/offline status
-      // 
-      // Real implementation would look like:
-      // const response = await fetch(`https://api.twitch.tv/helix/streams?user_login=${TWITCH_CHANNEL}`, {
-      //   headers: {
-      //     'Client-ID': 'YOUR_CLIENT_ID',
-      //     'Authorization': 'Bearer YOUR_ACCESS_TOKEN'
-      //   }
-      // });
-      // const data = await response.json();
-      // setIsLive(data.data && data.data.length > 0);
-      
-      // Mock: Set to offline by default (change to true to test live state)
-      setIsLive(false);
+      const live = await isTwitchChannelLive(TWITCH_CHANNEL);
+      setIsLive(live);
       setIsLoading(false);
+      onLiveChange?.(live);
     } catch (error) {
       console.error('Error checking Twitch status:', error);
       setIsLoading(false);

@@ -15,10 +15,12 @@ export function SchedulePanel({ airspaces, selectedAirspace, onSelectAirspace }:
   const inactiveAirspaces = airspaces.filter((a) => a.status === 'inactive');
 
   const [countdowns, setCountdowns] = useState<{ [key: string]: string }>({});
+  const [tomorrowFlags, setTomorrowFlags] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
     const updateCountdowns = () => {
       const newCountdowns: { [key: string]: string } = {};
+      const newTomorrowFlags: { [key: string]: boolean } = {};
       airspaces.forEach((airspace) => {
         if (airspace.status === 'active' || airspace.status === 'scheduled') {
           const result = getAirspaceCountdown(
@@ -27,9 +29,11 @@ export function SchedulePanel({ airspaces, selectedAirspace, onSelectAirspace }:
             airspace.scheduledEnd
           );
           newCountdowns[airspace.id] = result.text;
+          newTomorrowFlags[airspace.id] = result.isTomorrow;
         }
       });
       setCountdowns(newCountdowns);
+      setTomorrowFlags(newTomorrowFlags);
     };
 
     updateCountdowns();
@@ -37,6 +41,12 @@ export function SchedulePanel({ airspaces, selectedAirspace, onSelectAirspace }:
 
     return () => clearInterval(intervalId);
   }, [airspaces]);
+
+  // Split Scheduled into "Today" and "Tomorrow" so a start time that's
+  // actually after midnight Zulu doesn't get lumped in with same-day
+  // ones - this is what was missing before.
+  const scheduledToday = scheduledAirspaces.filter((a) => !tomorrowFlags[a.id]);
+  const scheduledTomorrow = scheduledAirspaces.filter((a) => tomorrowFlags[a.id]);
 
   return (
     <div className="h-full bg-[#141b26] border-r border-slate-700/50 flex flex-col">
@@ -89,17 +99,44 @@ export function SchedulePanel({ airspaces, selectedAirspace, onSelectAirspace }:
                 Scheduled ({scheduledAirspaces.length})
               </h3>
             </div>
-            <div className="space-y-2">
-              {scheduledAirspaces.map((airspace) => (
-                <AirspaceCard
-                  key={airspace.id}
-                  airspace={airspace}
-                  isSelected={selectedAirspace?.id === airspace.id}
-                  onClick={() => onSelectAirspace(airspace)}
-                  countdown={countdowns[airspace.id]}
-                />
-              ))}
-            </div>
+
+            {scheduledToday.length > 0 && (
+              <div className="mb-3">
+                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 pl-0.5">
+                  Today
+                </div>
+                <div className="space-y-2">
+                  {scheduledToday.map((airspace) => (
+                    <AirspaceCard
+                      key={airspace.id}
+                      airspace={airspace}
+                      isSelected={selectedAirspace?.id === airspace.id}
+                      onClick={() => onSelectAirspace(airspace)}
+                      countdown={countdowns[airspace.id]}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {scheduledTomorrow.length > 0 && (
+              <div>
+                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5 pl-0.5">
+                  Tomorrow
+                </div>
+                <div className="space-y-2">
+                  {scheduledTomorrow.map((airspace) => (
+                    <AirspaceCard
+                      key={airspace.id}
+                      airspace={airspace}
+                      isSelected={selectedAirspace?.id === airspace.id}
+                      onClick={() => onSelectAirspace(airspace)}
+                      countdown={countdowns[airspace.id]}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
