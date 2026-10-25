@@ -17,7 +17,9 @@ function figmaAssetResolver() {
 }
 
 export default defineConfig({
-  base: '/military-airspace-dashboard./',
+  // Desktop (Electron) build uses relative paths; the GitHub Pages deploy
+  // keeps its original sub-path.
+  base: process.env.BUILD_TARGET === 'desktop' ? './' : '/military-airspace-dashboard./',
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
