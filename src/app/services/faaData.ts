@@ -1,268 +1,163 @@
 /**
- * FAA Special Use Airspace (SUA) Data Service
- * 
- * This service fetches live schedule data from the FAA SUA website.
- * In production, this would require a backend proxy to avoid CORS issues,
- * or use the FAA's official API if available.
- * 
- * For now, this uses mock data structured to match FAA SUA format.
+ * FAA Special Use Airspace (SUA) schedule service.
+ *
+ * Live data comes from the Electron main process (see electron/faa.cjs),
+ * which can reach sua.faa.gov without the browser CORS restrictions that
+ * made a pure-web version impossible. In a plain browser there is no live
+ * data and the dashboard says so, instead of showing invented schedules.
+ *
+ * Nothing in this file (or anywhere in the renderer) generates schedule data.
  */
+import type { Airspace } from '../components/AirspaceMap';
 
-export interface FAAScheduleEntry {
-  date: string;
-  startTime: string;
-  endTime: string;
-  altitude: string;
-  status: 'active' | 'scheduled' | 'inactive';
-}
-
-export interface FAAAirspaceData {
+export interface FaaEntry {
+  scheduleId: string;
+  airspaceId: string;
+  /** P = pending approval, W = waiting to start, H = hot (activated), ? = source carries no status. */
+  status: string;
+  type?: string;
   name: string;
-  type: 'MOA' | 'ATCAA';
-  controllingAgency: string;
-  frequency: string;
-  altitudeFloor: string;
-  altitudeCeiling: string;
-  schedule: FAAScheduleEntry[];
-  lastUpdated: string;
+  start: number; // epoch ms (UTC)
+  end: number;
+  lowAlt?: string;  // hundreds of feet
+  highAlt?: string;
 }
 
-// FAA SUA URLs for reference
-const FAA_SUA_URLS = {
-  'BROWNWOOD 4 MOA': 'https://sua.faa.gov/sua/lkSched.jsp?asname=BROWNWOOD%204%20MOA',
-  'BROWNWOOD 3 ATCAA': 'https://sua.faa.gov/sua/lkSched.jsp?asname=BROWNWOOD%203%20ATCAA',
-  'BROWNWOOD 4 ATCAA': 'https://sua.faa.gov/sua/lkSched.jsp?asname=BROWNWOOD%204%20ATCAA',
-  'BROWNWOOD LIGHTNING 2 ATCAA': 'https://sua.faa.gov/sua/lkSched.jsp?asname=BROWNWOOD%20LIGHTNING%202%20ATCAA',
-  'BROWNWOOD LIGHTNING 3 ATCAA': 'https://sua.faa.gov/sua/lkSched.jsp?asname=BROWNWOOD%20LIGHTNING%203%20ATCAA',
-  'BRADY NORTH MOA': 'https://sua.faa.gov/sua/lkSched.jsp?asname=BRADY%20NORTH%20MOA',
+export type FaaSourceId = 'gateway' | 'textlist' | 'public';
+
+export interface FaaAttempt {
+  source: string;
+  label?: string;
+  /** failed = tried and failed; skipped = deliberately not tried (no login, previous login rejected...). */
+  outcome?: 'failed' | 'skipped';
+  code: string;
+  httpStatus?: number;
+  tries?: number;
+  durationMs?: number;
+  error: string;
+}
+
+export interface FaaFetchResult {
+  ok: boolean;
+  schemaVersion?: number;
+  source?: FaaSourceId;
+  sourceLabel?: string;
+  /** nationwide-24h: the whole next-24h list, so "absent" means "no schedule in that list". per-airspace: one page per airspace. */
+  coverage?: 'nationwide-24h' | 'per-airspace';
+  verification?: 'documented' | 'undocumented' | 'unverified-format';
+  /** When this computer retrieved it. */
+  fetchedAt?: number;
+  /** How old the data itself is (the feed's own generation time when it states one, else fetchedAt). */
+  asOf?: number;
+  validFrom?: number;
+  /** End of the period the schedule list covers; null when the source does not state one. */
+  validThrough?: number | null;
+  feedGeneratedAt?: number;
+  entries?: FaaEntry[];
+  unmatched?: string[];
+  notes?: string[];
+  attempts?: FaaAttempt[];
+  stats?: Record<string, unknown>;
+  error?: string;
+  /** Server asked us to wait this long before the next request (HTTP 429). */
+  retryAfterMs?: number;
+  /** True when the desktop app returned its previous result instead of making a new request. */
+  throttled?: boolean;
+}
+
+export interface FaaLogLine { t: number; level: 'info' | 'warn' | 'error'; source: string; msg: string }
+export interface FaaRawResponse {
+  capturedAt: number; url: string; httpStatus: number; headers: Record<string, string>;
+  bytes: number; truncated: boolean; text: string; name?: string;
+}
+export interface FaaDiagnostics {
+  generatedAt: number;
+  log: FaaLogLine[];
+  raw: { gateway?: FaaRawResponse; textlist?: FaaRawResponse; public?: FaaRawResponse[] };
+  lastSuccess: { source: string; fetchedAt: number; asOf: number } | null;
+  sources: { id: string; label: string; verification: string; coverage: string }[];
+}
+
+declare global {
+  interface Window {
+    airspaceDesktop?: {
+      isDesktop: true;
+      fetchFaaSchedules: (names: string[]) => Promise<FaaFetchResult>;
+      getFaaDiagnostics: () => Promise<FaaDiagnostics>;
+      getSettings: () => Promise<{
+        hasCredentials: boolean; user: string; secureStorage: boolean; version: string; userDataPath: string;
+      }>;
+      saveCredentials: (user: string, pwd: string) => Promise<{ ok: boolean; error?: string; persisted?: boolean }>;
+      clearCredentials: () => Promise<{ ok: boolean }>;
+      notify: (title: string, body: string) => Promise<boolean>;
+      showDebugFolder: () => Promise<boolean>;
+    };
+  }
+}
+
+/** Plain-language names for the places we try, used in the banner and diagnostics. */
+export const SOURCE_NAME: Record<string, string> = {
+  gateway: 'FAA SUA Schedule Data Gateway',
+  textlist: 'FAA SUA website Text List export',
+  public: 'FAA SUA website public schedule pages',
+  browser: 'Web browser (blocked by CORS)',
+  app: 'Desktop app',
 };
 
-/**
- * Fetches current schedule data from FAA SUA website
- * 
- * NOTE: In production, implement one of these approaches:
- * 1. Backend proxy server to fetch FAA data and handle CORS
- * 2. Use FAA's official API if they provide one
- * 3. Set up scheduled scraping with a backend service
- */
-async function fetchFAASchedule(airspaceName: string): Promise<FAAAirspaceData> {
-  // TODO: Replace with actual FAA API call through backend proxy
-  // const response = await fetch(`/api/faa-sua/${encodeURIComponent(airspaceName)}`);
-  // return await response.json();
-  
-  // For now, return mock data that matches FAA format
-  return getMockFAAData(airspaceName);
+export const isDesktop = typeof window !== 'undefined' && Boolean(window.airspaceDesktop?.isDesktop);
+
+export const BROWSER_MODE_ERROR =
+  'Live FAA data needs the desktop app: web browsers block requests to sua.faa.gov (CORS). No FAA schedule data is available in this browser.';
+
+/** Every distinct FAA designation the dashboard needs to look up. */
+export function allFaaNames(airspaces: Airspace[]): string[] {
+  return [...new Set(airspaces.flatMap((a) => a.faaNames ?? []))];
 }
 
-/**
- * Mock FAA data - structured to match real FAA SUA schedule format
- * Replace this with actual API calls to FAA
- */
-function getMockFAAData(airspaceName: string): FAAAirspaceData {
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
-  const currentHour = today.getUTCHours(); // schedule times are Zulu (UTC)
-  
-  // Mock data based on typical FAA SUA schedules
-  const mockData: Record<string, FAAAirspaceData> = {
-    'BROWNWOOD 4 MOA': {
-      name: 'BROWNWOOD 4 MOA',
-      type: 'MOA',
-      controllingAgency: 'FORT WORTH CENTER',
-      frequency: '126.65',
-      altitudeFloor: '13,000 MSL',
-      altitudeCeiling: '18,000 MSL',
-      schedule: [
-        {
-          date: todayStr,
-          startTime: '14:00Z',
-          endTime: '23:00Z',
-          altitude: '13000-18000',
-          status: currentHour >= 14 && currentHour < 23 ? 'active' : 'scheduled',
-        },
-      ],
-      lastUpdated: new Date().toISOString(),
-    },
-    'BROWNWOOD 3 ATCAA': {
-      name: 'BROWNWOOD 3 ATCAA',
-      type: 'ATCAA',
-      controllingAgency: 'FORT WORTH CENTER',
-      frequency: '126.65',
-      altitudeFloor: 'FL180',
-      altitudeCeiling: 'FL600',
-      schedule: [
-        {
-          date: todayStr,
-          startTime: '14:00Z',
-          endTime: '23:00Z',
-          altitude: 'FL180-FL600',
-          status: currentHour >= 14 && currentHour < 23 ? 'active' : 'scheduled',
-        },
-      ],
-      lastUpdated: new Date().toISOString(),
-    },
-    'BROWNWOOD 4 ATCAA': {
-      name: 'BROWNWOOD 4 ATCAA',
-      type: 'ATCAA',
-      controllingAgency: 'FORT WORTH CENTER',
-      frequency: '126.65',
-      altitudeFloor: 'FL180',
-      altitudeCeiling: 'FL600',
-      schedule: [
-        {
-          date: todayStr,
-          startTime: '14:00Z',
-          endTime: '23:00Z',
-          altitude: 'FL180-FL600',
-          status: currentHour >= 14 && currentHour < 23 ? 'active' : 'scheduled',
-        },
-      ],
-      lastUpdated: new Date().toISOString(),
-    },
-    'BROWNWOOD LIGHTNING 2 ATCAA': {
-      name: 'BROWNWOOD LIGHTNING 2 ATCAA',
-      type: 'ATCAA',
-      controllingAgency: 'FORT WORTH CENTER',
-      frequency: '126.65',
-      altitudeFloor: 'FL180',
-      altitudeCeiling: 'FL600',
-      schedule: [
-        {
-          date: todayStr,
-          startTime: '15:00Z',
-          endTime: '22:00Z',
-          altitude: 'FL180-FL600',
-          status: currentHour >= 15 && currentHour < 22 ? 'active' : 'scheduled',
-        },
-      ],
-      lastUpdated: new Date().toISOString(),
-    },
-    'BROWNWOOD LIGHTNING 3 ATCAA': {
-      name: 'BROWNWOOD LIGHTNING 3 ATCAA',
-      type: 'ATCAA',
-      controllingAgency: 'FORT WORTH CENTER',
-      frequency: '126.65',
-      altitudeFloor: 'FL180',
-      altitudeCeiling: 'FL600',
-      schedule: [
-        {
-          date: todayStr,
-          startTime: '15:00Z',
-          endTime: '22:00Z',
-          altitude: 'FL180-FL600',
-          status: 'inactive',
-        },
-      ],
-      lastUpdated: new Date().toISOString(),
-    },
-    'BRADY NORTH MOA': {
-      name: 'BRADY NORTH MOA',
-      type: 'MOA',
-      controllingAgency: 'FORT WORTH CENTER',
-      frequency: '126.65',
-      altitudeFloor: '3,600 MSL',
-      altitudeCeiling: '18,000 MSL',
-      schedule: [
-        {
-          date: todayStr,
-          startTime: '19:00Z',
-          endTime: '01:00Z',
-          altitude: '3600-18000',
-          status: 'scheduled',
-        },
-      ],
-      lastUpdated: new Date().toISOString(),
-    },
-    'BRADY SOUTH LOW': {
-      name: 'BRADY SOUTH MOA',
-      type: 'MOA',
-      controllingAgency: 'FORT WORTH CENTER',
-      frequency: '126.65',
-      altitudeFloor: '500 AGL',
-      altitudeCeiling: '5,999 MSL',
-      schedule: [],
-      lastUpdated: new Date().toISOString(),
-    },
-    'BRADY SOUTH HIGH': {
-      name: 'BRADY SOUTH MOA',
-      type: 'MOA',
-      controllingAgency: 'FORT WORTH CENTER',
-      frequency: '126.65',
-      altitudeFloor: '6,000 MSL',
-      altitudeCeiling: '18,000 MSL',
-      schedule: [],
-      lastUpdated: new Date().toISOString(),
-    },
-  };
-  
-  return mockData[airspaceName] || {
-    name: airspaceName,
-    type: 'MOA',
-    controllingAgency: 'UNKNOWN',
-    frequency: '',
-    altitudeFloor: '',
-    altitudeCeiling: '',
-    schedule: [],
-    lastUpdated: new Date().toISOString(),
-  };
-}
-
-/**
- * Get current status for an airspace based on its schedule
- */
-export function getAirspaceStatus(schedule: FAAScheduleEntry[]): 'active' | 'scheduled' | 'inactive' {
-  if (schedule.length === 0) return 'inactive';
-  
-  const now = new Date();
-  const currentTime = now.toISOString();
-  
-  for (const entry of schedule) {
-    if (entry.status === 'active') {
-      return 'active';
-    }
-    if (entry.status === 'scheduled') {
-      return 'scheduled';
-    }
+export async function fetchFaaSchedules(names: string[]): Promise<FaaFetchResult> {
+  if (!window.airspaceDesktop) {
+    return {
+      ok: false,
+      error: BROWSER_MODE_ERROR,
+      attempts: [{ source: 'browser', outcome: 'failed', code: 'CORS', error: BROWSER_MODE_ERROR }],
+    };
   }
-  
-  return 'inactive';
-}
-
-/**
- * Get active time string from schedule
- */
-export function getActiveTimeString(schedule: FAAScheduleEntry[]): string | undefined {
-  const activeEntry = schedule.find(entry => entry.status === 'active');
-  if (activeEntry) {
-    return `${activeEntry.startTime} - ${activeEntry.endTime}`;
+  try {
+    return await window.airspaceDesktop.fetchFaaSchedules(names);
+  } catch (err) {
+    const error = `FAA request failed inside the app: ${err instanceof Error ? err.message : String(err)}`;
+    return { ok: false, error, attempts: [{ source: 'app', outcome: 'failed', code: 'IPC', error }] };
   }
-  return undefined;
 }
 
-/**
- * Main export - fetch all Brownwood complex airspace data
- */
-export async function fetchBrownwoodComplexData(): Promise<Record<string, FAAAirspaceData>> {
-  // In production, fetch all in parallel
-  // const results = await Promise.all([
-  //   fetchFAASchedule('BROWNWOOD 4 MOA'),
-  //   fetchFAASchedule('BROWNWOOD 3 ATCAA'),
-  //   fetchFAASchedule('BROWNWOOD 4 ATCAA'),
-  //   fetchFAASchedule('BROWNWOOD LIGHTNING 2 ATCAA'),
-  //   fetchFAASchedule('BROWNWOOD LIGHTNING 3 ATCAA'),
-  //   fetchFAASchedule('BRADY NORTH MOA'),
-  // ]);
-  
-  return {
-    'BROWNWOOD 4 MOA': getMockFAAData('BROWNWOOD 4 MOA'),
-    'BROWNWOOD 3 ATCAA': getMockFAAData('BROWNWOOD 3 ATCAA'),
-    'BROWNWOOD 4 ATCAA': getMockFAAData('BROWNWOOD 4 ATCAA'),
-    'BROWNWOOD LIGHTNING 2 ATCAA': getMockFAAData('BROWNWOOD LIGHTNING 2 ATCAA'),
-    'BROWNWOOD LIGHTNING 3 ATCAA': getMockFAAData('BROWNWOOD LIGHTNING 3 ATCAA'),
-    'BRADY NORTH MOA': getMockFAAData('BRADY NORTH MOA'),
-    'BRADY SOUTH LOW': getMockFAAData('BRADY SOUTH LOW'),
-    'BRADY SOUTH HIGH': getMockFAAData('BRADY SOUTH HIGH'),
-  };
+export async function fetchFaaDiagnostics(): Promise<FaaDiagnostics | null> {
+  try { return (await window.airspaceDesktop?.getFaaDiagnostics()) ?? null; } catch { return null; }
 }
 
-export { FAA_SUA_URLS };
+/* ---- Cache: last good result, so a restart/outage can show "last known" windows ----
+ * A cached result is NEVER live. It keeps its original fetchedAt/asOf; the UI
+ * labels it CACHED and treats every airspace's current status as UNKNOWN.      */
+
+const CACHE_KEY = 'faa-schedule-cache-v2';
+/** Cached schedules older than this are discarded outright. */
+export const CACHE_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+
+export function loadCachedFaa(): FaaFetchResult | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const r = JSON.parse(raw) as FaaFetchResult;
+    if (!r.ok || !r.fetchedAt || !Array.isArray(r.entries)) return null;
+    const asOf = r.asOf ?? r.fetchedAt;
+    return Date.now() - asOf > CACHE_MAX_AGE_MS ? null : r;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCachedFaa(result: FaaFetchResult) {
+  try {
+    const { attempts: _a, stats: _s, ...slim } = result;
+    localStorage.setItem(CACHE_KEY, JSON.stringify(slim));
+  } catch { /* storage full/blocked: ignore */ }
+}

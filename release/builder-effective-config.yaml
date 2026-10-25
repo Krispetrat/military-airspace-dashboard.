@@ -1,0 +1,30 @@
+directories:
+  output: release
+  buildResources: build
+appId: com.airspace.scheduler
+productName: Military Airspace Scheduler
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - '!electron/*.test.cjs'
+      - '!electron/dev-harness.cjs'
+      - '!electron/faa-probe.cjs'
+      - build/icon.png
+      - package.json
+asar: true
+win:
+  icon: build/icon.png
+  signAndEditExecutable: false
+  target:
+    - target: portable
+      arch:
+        - x64
+  artifactName: MilitaryAirspaceScheduler-${version}-portable.${ext}
+portable:
+  artifactName: MilitaryAirspaceScheduler-${version}-portable.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: MilitaryAirspaceScheduler-Setup-${version}.${ext}
+electronVersion: 44.5.1

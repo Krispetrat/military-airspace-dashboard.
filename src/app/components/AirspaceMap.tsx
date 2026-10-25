@@ -5,14 +5,21 @@ import * as topojson from 'topojson-client';
 
 // We import TopoJSON datasets directly from the installed npm packages
 import usData from 'us-atlas/states-10m.json';
+import type { ScheduleWindow } from '../utils/schedule';
 
 export interface Airspace {
   id: string;
   name: string;
   type: 'MOA' | 'ATCAA';
-  status: 'active' | 'inactive' | 'scheduled';
+  /**
+   * Placeholder only: resolveAirspace() overwrites this from FAA data on every render.
+   * 'inactive' means "no schedule listed in the current FAA data", never "confirmed quiet".
+   */
+  status: 'active' | 'inactive' | 'scheduled' | 'unknown';
+  /** Charted limits of the airspace (static reference). FAA-filed limits for a specific schedule are on its window. */
   altitudeFloor: string;
   altitudeCeiling: string;
+  /** Reference only (typical published hours). NEVER used to compute status or shown as a schedule. */
   scheduledStart?: string;
   scheduledEnd?: string;
   activeTime?: string;
@@ -22,6 +29,17 @@ export interface Airspace {
   center: [number, number];
   section?: string;
   faaUrl?: string;
+  /** FAA designations (as used by sua.faa.gov) whose schedules drive this shape. */
+  faaNames?: string[];
+  // ---- Computed live by resolveAirspace(); not part of the static definition ----
+  windows?: ScheduleWindow[];
+  currentWindow?: ScheduleWindow;
+  nextWindow?: ScheduleWindow;
+  /** Windows from cached (not current) FAA data: displayed as "last known" only. */
+  lastKnownWindows?: ScheduleWindow[];
+  dataSource?: 'faa' | 'cached' | 'none';
+  pending?: boolean;
+  lateOpen?: boolean;
 }
 
 /**
@@ -43,6 +61,7 @@ export const AIRSPACES: Airspace[] = [
   // BROWNWOOD 1 EAST
   {
     id: 'brownwood-1-east',
+    faaNames: ["BROWNWOOD 1 EAST MOA"],
     name: 'BROWNWOOD 1 EAST',
     type: 'MOA',
     status: 'active',
@@ -64,6 +83,7 @@ export const AIRSPACES: Airspace[] = [
   // BROWNWOOD 1 WEST
   {
     id: 'brownwood-1-west',
+    faaNames: ["BROWNWOOD 1 WEST MOA"],
     name: 'BROWNWOOD 1 WEST',
     type: 'MOA',
     status: 'active',
@@ -85,6 +105,7 @@ export const AIRSPACES: Airspace[] = [
   // BROWNWOOD 2 EAST
   {
     id: 'brownwood-2-east',
+    faaNames: ["BROWNWOOD 2 EAST MOA"],
     name: 'BROWNWOOD 2 EAST',
     type: 'MOA',
     status: 'active',
@@ -106,6 +127,7 @@ export const AIRSPACES: Airspace[] = [
   // BROWNWOOD 2 WEST
   {
     id: 'brownwood-2-west',
+    faaNames: ["BROWNWOOD 2 WEST MOA"],
     name: 'BROWNWOOD 2 WEST',
     type: 'MOA',
     status: 'active',
@@ -127,6 +149,7 @@ export const AIRSPACES: Airspace[] = [
   // BROWNWOOD 3
   {
     id: 'brownwood-3',
+    faaNames: ["BROWNWOOD 3 MOA"],
     name: 'BROWNWOOD 3',
     type: 'MOA',
     status: 'scheduled',
@@ -147,6 +170,7 @@ export const AIRSPACES: Airspace[] = [
   // BROWNWOOD 4
   {
     id: 'brownwood-4',
+    faaNames: ["BROWNWOOD 4 MOA"],
     name: 'BROWNWOOD 4 MOA',
     type: 'MOA',
     status: 'scheduled',
@@ -168,6 +192,7 @@ export const AIRSPACES: Airspace[] = [
   // BRADY NORTH
   {
     id: 'brady-north',
+    faaNames: ["BRADY NORTH MOA"],
     name: 'BRADY NORTH MOA',
     type: 'MOA',
     status: 'inactive',
@@ -192,6 +217,7 @@ export const AIRSPACES: Airspace[] = [
   // BRADY HIGH (South)
   {
     id: 'brady-high',
+    faaNames: ["BRADY SOUTH HIGH MOA"],
     name: 'BRADY SOUTH HIGH MOA',
     type: 'MOA',
     status: 'inactive',
@@ -211,6 +237,7 @@ export const AIRSPACES: Airspace[] = [
   // BRADY LOW (South)
   {
     id: 'brady-low',
+    faaNames: ["BRADY SOUTH LOW MOA"],
     name: 'BRADY SOUTH LOW MOA',
     type: 'MOA',
     status: 'inactive',
@@ -230,6 +257,7 @@ export const AIRSPACES: Airspace[] = [
   // BROWNWOOD 3/4 ATCAA
   {
     id: 'brownwood-3-4-atcaa',
+    faaNames: ["BROWNWOOD 3 ATCAA", "BROWNWOOD 4 ATCAA"],
     name: 'BROWNWOOD 3/4 ATCAA',
     type: 'ATCAA',
     status: 'active',
@@ -256,6 +284,7 @@ export const AIRSPACES: Airspace[] = [
   // BROWNWOOD LIGHTNING 2/3 ATCAA
   {
     id: 'brownwood-lightning-2-3-atcaa',
+    faaNames: ["BROWNWOOD LIGHTNING 2 ATCAA", "BROWNWOOD LIGHTNING 3 ATCAA"],
     name: 'BROWNWOOD LIGHTNING 2/3 ATCAA',
     type: 'ATCAA',
     status: 'active',
@@ -308,7 +337,8 @@ interface AirspaceMapProps {
 
 export function AirspaceMap({ selectedAirspace, onSelectAirspace, airspaces = AIRSPACES }: AirspaceMapProps) {
   const [hoveredAirspace, setHoveredAirspace] = useState<string | null>(null);
-  const [currentScale, setCurrentScale] = useState(1);
+  const INITIAL_SCALE = 2.6; // the Brownwood/Brady complex is the map centre; start zoomed onto it
+  const [currentScale, setCurrentScale] = useState(INITIAL_SCALE);
   
   const mapWidth = 1200;
   const mapHeight = 900;
@@ -362,6 +392,7 @@ export function AirspaceMap({ selectedAirspace, onSelectAirspace, airspaces = AI
     airspace.type === 'MOA' && airspace.id.startsWith('brownwood-');
 
   const getStrokeColor = (airspace: Airspace, isHovered: boolean, isSelected: boolean) => {
+    if (airspace.lateOpen) return 'rgba(248, 113, 113, 0.95)';
     if (!isHovered && !isSelected && isBrownwoodMoaSection(airspace)) {
       return 'transparent';
     }
@@ -390,7 +421,8 @@ export function AirspaceMap({ selectedAirspace, onSelectAirspace, airspaces = AI
 
       {/* Zoom and Pan Wrapper */}
       <TransformWrapper
-        initialScale={1.0}
+        initialScale={INITIAL_SCALE}
+        centerOnInit={true}
         minScale={1.0}
         maxScale={8}
         centerZoomedOut={true}
@@ -610,6 +642,10 @@ export function AirspaceMap({ selectedAirspace, onSelectAirspace, airspaces = AI
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded-sm bg-[rgba(100,116,139,0.2)] border border-[rgba(100,116,139,0.4)]"></div>
             <span className="text-xs text-slate-400">Inactive</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-sm border-2 border-[rgba(248,113,113,0.95)]"></div>
+            <span className="text-xs text-slate-400">Open late</span>
           </div>
           <div className="flex items-center gap-2 pt-1 border-t border-slate-700/50">
             <div className="w-4 h-0.5 border-t-2 border-dashed border-slate-400"></div>

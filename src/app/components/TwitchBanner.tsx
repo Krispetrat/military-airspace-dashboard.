@@ -51,7 +51,7 @@ export function TwitchBanner({ className = '', onOpenPopout, onLiveChange }: Twi
   if (isLoading) {
     return (
       <div 
-        className={`w-full bg-purple-700 text-white px-6 py-3 ${className}`}
+        className={`w-full bg-gradient-to-r from-[#1b1030] via-[#2a1650] to-[#1b1030] border-b border-purple-500/30 text-white px-6 py-1.5 ${className}`}
       >
         <div className="flex items-center justify-center gap-3">
           <div className="animate-pulse text-sm font-medium">
@@ -64,7 +64,7 @@ export function TwitchBanner({ className = '', onOpenPopout, onLiveChange }: Twi
 
   return (
     <div
-      className={`w-full bg-purple-700 text-white px-6 py-3 ${className}`}
+      className={`w-full bg-gradient-to-r from-[#1b1030] via-[#2a1650] to-[#1b1030] border-b border-purple-500/30 text-white px-6 py-1.5 ${className}`}
     >
       <div className="flex items-center justify-center gap-4">
         {/* Live/Offline Indicator */}
@@ -75,7 +75,7 @@ export function TwitchBanner({ className = '', onOpenPopout, onLiveChange }: Twi
                 <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                 <span className="text-xs font-bold uppercase tracking-wide">LIVE</span>
               </div>
-              <span className="text-sm font-semibold">
+              <span className="text-xs font-semibold text-purple-100">
                 LIVE – DFW Scanner (Courtesy of Thor Aviation)
               </span>
             </>
@@ -85,7 +85,7 @@ export function TwitchBanner({ className = '', onOpenPopout, onLiveChange }: Twi
                 <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
                 <span className="text-xs font-bold uppercase tracking-wide">OFFLINE</span>
               </div>
-              <span className="text-sm font-semibold">
+              <span className="text-xs font-semibold text-purple-100">
                 OFFLINE – DFW Scanner (Courtesy of Thor Aviation)
               </span>
             </>
@@ -98,7 +98,7 @@ export function TwitchBanner({ className = '', onOpenPopout, onLiveChange }: Twi
           {isLive && onOpenPopout && (
             <button
               onClick={handlePopoutClick}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded-md transition-colors text-xs font-semibold"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500 hover:bg-purple-400 rounded-md transition-colors text-xs font-semibold"
               aria-label="Open Popout Player"
             >
               <Tv className="w-3.5 h-3.5" />
@@ -109,7 +109,7 @@ export function TwitchBanner({ className = '', onOpenPopout, onLiveChange }: Twi
           {/* External Link Button */}
           <button
             onClick={handleClick}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-800 hover:bg-purple-600 rounded-md transition-colors text-xs font-semibold"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/40 border border-purple-400/30 rounded-md transition-colors text-xs font-semibold"
             aria-label={`Visit ${TWITCH_CHANNEL} on Twitch`}
           >
             <span>Watch on Twitch</span>

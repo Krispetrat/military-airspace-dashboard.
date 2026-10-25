@@ -1,4 +1,10 @@
 /**
+ * DEPRECATED / UNUSED. Do not import.
+ * The helpers below derive "live status" from typical Zulu hours. That is an
+ * estimate, not FAA data, and the dashboard must never present it as activity.
+ * Real status comes from utils/schedule.ts (resolveAirspace) fed by FAA data.
+ */
+/**
  * Time utilities for aviation displays
  * Handles CST (local), UTC (Zulu), and countdown calculations
  */
