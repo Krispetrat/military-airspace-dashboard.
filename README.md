@@ -11,9 +11,18 @@ Live MOA / ATCAA schedule dashboard for the Brownwood & Brady complex (Central T
 - `npm test` – FAA retrieval, schedule and connection-state tests
 - `npm run faa:probe` – live check of each FAA source (run on a normal internet connection)
 
+## Tabs
+
+* **Map** - the original map, schedule list and activity list, plus optional **airports** (military and civil, with METAR/TAF), **ADS-B aircraft** and **weather radar** layers.
+* **Daily Overview** - a plain-language summary of one day, with published schedules, observed aircraft, historical patterns and estimates kept visibly separate.
+* **Airspace Timeline** - a Gantt-style chart of every monitored MOA, ATCAA and range for one date, in local time or UTC.
+* **History** - searchable records, weekly patterns, monthly/yearly statistics, scheduled-vs-observed comparison, and backup/restore/CSV export of the local SQLite database.
+
+Full description, sources, limits and the exact rules behind every estimate: [docs/NEW_FEATURES.md](docs/NEW_FEATURES.md).
+
 ## FAA data
 Live schedules are fetched by the desktop app (`electron/faa.cjs`); browsers cannot reach sua.faa.gov (CORS).
-**Nothing is ever estimated.** If no source returns validated FAA data the dashboard shows UNKNOWN / DATA UNAVAILABLE and a red banner; there are no "typical hours".
+**Nothing is ever estimated in the schedule list, the map status colours or the alerts.** If no source returns validated FAA data the dashboard shows UNKNOWN / DATA UNAVAILABLE and a red banner; there are no "typical hours". Estimates exist only in the Daily Overview and Timeline tabs, where every one is labelled ESTIMATE, carries its source and confidence, and is never produced for a date the FAA list already covers (see [docs/NEW_FEATURES.md](docs/NEW_FEATURES.md)).
 
 Sources, tried in order until one returns a validated response:
 1. **FAA SUA Schedule Data Gateway** – official, documented ([format](https://sua.faa.gov/ops/docs/suagwDataFmt.html)); needs a registered FAA login (Settings). Next-24-hour list, updated each minute, polled every 2 min.
@@ -41,3 +50,42 @@ Indicator: green FAA CONNECTED, yellow FAA DATA STALE, red FAA DISCONNECTED, gra
 ## Late-open alerts
 An alert fires when a scheduled window ends at/after the cutoff (default 10:00 PM Central, or 12–6 AM).
 Shown as a top bar, pop-up cards and a desktop notification. Only current FAA data triggers alerts (never cached or missing data).
+
+## Airspace areas and range activity
+
+The map now covers four things, all driven by data files in `src/app/data/`:
+
+| Area | What is drawn | Source |
+|---|---|---|
+| Brownwood & Brady | 11 MOA/ATCAA shapes (unchanged) | original app data |
+| Fort Sill / Falcon Range | R-5601C (contains Falcon Bombing Range) and R-5601D | 14 CFR 73.56, 81 FR 79998; cross-checked vertex-for-vertex against FAA NASR |
+| Rivers MOA | one MOA, 8,000 ft MSL up to (not incl.) 18,000 ft MSL, Fort Worth Center | FAA NASR cycle 2026-10-29 |
+
+Read `docs/DATA_SOURCES.md` before relying on any of it: it lists what was verified, what could not be, and what each
+evidence label means. Short version: the Fort Sill Range Control PDF has **no coordinates**, so the Falcon outline is the
+FAA's restricted-airspace boundary over the range, not a survey of the ground impact area; and nothing is shown for hours,
+frequencies or schedules unless a source states it.
+
+### Range activity (Fort Sill Range Control)
+
+`Activity` tab and the Falcon Range detail panel show aircraft-related rows from the published Range Control PDF, each tagged
+*In schedule*, *General schedule* or *Inferred* (and *Confirmed*, reserved for a NOTAM/ATC-grade source; nothing uses it yet).
+The desktop app re-reads the PDF every 3 hours (`electron/rangecontrol.cjs` -> `src/app/utils/rangeControlParse.ts`). If that
+fails, or in a web browser, the bundled snapshot (`src/app/data/activity/fortSillRangeControl.ts`) is shown, labelled with
+its coverage dates. Days outside the coverage are "not loaded", never "nothing scheduled".
+
+### Adding another MOA, range or activity source
+
+1. **Airspace**: `npm run airspace:import -- --search "<text>"` finds it in the FAA NASR snapshot (dev dependency
+   `@squawk/airspace-data`); `npm run airspace:import -- --name "<exact name>" --id <slug> --group <groupId>` prints a ready
+   entry. Paste it into a file in `src/app/data/airspace/`, list it in `index.ts`.
+2. **New group** (a new complex): add one line to `DEFS` in `src/app/data/regions.ts`. Map presets, filter chips and
+   zoom-to are computed from the airspace in the group.
+3. **Activity source**: add an `ActivitySource` in `src/app/data/activity/` (see `fortSillRangeControl.ts`) and list it in
+   `index.ts`; point airspace at it with `activityFacilityIds`.
+4. `npm test` checks ids, polygons, region bounds, and (when the NASR package is installed) compares geometry and limits
+   against it.
+
+### Tests
+
+`npm test` runs 224 tests: the original 97 FAA/schedule/data/range-control tests, plus time zones (DST days), the SQLite history store, pattern analysis, the day model and its wording rules, aviation-data parsers, the main-process network proxy and file operations, radar registration, airports and label placement.
